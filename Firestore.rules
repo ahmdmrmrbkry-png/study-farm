@@ -1,0 +1,63 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // المستخدم يقدر يقرأ ويعدل بيانات حسابه الأساسية فقط.
+    // العمليات الحساسة مثل النقاط والسحب والشراء تتم من Cloud Functions.
+    match /users/{userId} {
+      allow read: if request.auth != null
+                  && request.auth.uid == userId;
+
+      allow create: if request.auth != null
+                    && request.auth.uid == userId;
+
+      allow update: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.points == resource.data.points
+                    && request.resource.data.balance == resource.data.balance
+                    && request.resource.data.totalEarned == resource.data.totalEarned
+                    && request.resource.data.totalWithdrawn == resource.data.totalWithdrawn
+                    && request.resource.data.completedTasks == resource.data.completedTasks;
+
+      allow delete: if false;
+
+      match /completedTasks/{taskId} {
+        allow read: if request.auth != null
+                    && request.auth.uid == userId;
+        allow write: if false;
+      }
+
+      match /purchases/{purchaseId} {
+        allow read: if request.auth != null
+                    && request.auth.uid == userId;
+        allow write: if false;
+      }
+    }
+
+    // المهام متاحة للقراءة للمستخدمين المسجلين فقط.
+    // إنشاء وتعديل وحذف المهام يتم من Cloud Functions.
+    match /tasks/{taskId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // المنتجات متاحة للقراءة للمستخدمين المسجلين فقط.
+    match /products/{productId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // المستخدم يستطيع إنشاء طلب سحب من خلال Cloud Function فقط.
+    match /withdrawals/{withdrawalId} {
+      allow read: if request.auth != null
+                  && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+
+    // سجل النظام غير متاح للمستخدمين.
+    match /auditLogs/{logId} {
+      allow read, write: if false;
+    }
+  }
+}
