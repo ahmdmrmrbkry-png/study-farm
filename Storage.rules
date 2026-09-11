@@ -1,0 +1,17 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // المستخدم يقدر يقرأ ويرفع ملفاته داخل مجلده فقط
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null
+                          && request.auth.uid == userId;
+    }
+
+    // منع أي وصول لباقي الملفات
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
