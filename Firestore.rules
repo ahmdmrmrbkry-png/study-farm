@@ -3,60 +3,113 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // المستخدم يقدر يقرأ ويعدل بيانات حسابه الأساسية فقط.
-    // العمليات الحساسة مثل النقاط والسحب والشراء تتم من Cloud Functions.
+    // ==================================================
+    // المستخدم
+    // ==================================================
     match /users/{userId} {
+
+      // المستخدم يقرأ حسابه فقط.
       allow read: if request.auth != null
                   && request.auth.uid == userId;
 
-      allow create: if request.auth != null
-                    && request.auth.uid == userId;
+      // إنشاء الحساب يتم من Cloud Functions فقط.
+      allow create: if false;
 
+      // المستخدم يستطيع تعديل بياناته غير المالية فقط.
+      // الرصيد والنقاط والأرباح والسحوبات لا يمكن تعديلها
+      // من التطبيق مباشرة.
       allow update: if request.auth != null
                     && request.auth.uid == userId
-                    && request.resource.data.points == resource.data.points
-                    && request.resource.data.balance == resource.data.balance
-                    && request.resource.data.totalEarned == resource.data.totalEarned
-                    && request.resource.data.totalWithdrawn == resource.data.totalWithdrawn
-                    && request.resource.data.completedTasks == resource.data.completedTasks;
+                    && request.resource.data.points
+                       == resource.data.points
+                    && request.resource.data.balance
+                       == resource.data.balance
+                    && request.resource.data.totalEarned
+                       == resource.data.totalEarned
+                    && request.resource.data.totalWithdrawn
+                       == resource.data.totalWithdrawn
+                    && request.resource.data.completedTasks
+                       == resource.data.completedTasks
+                    && request.resource.data.uid
+                       == resource.data.uid;
 
+      // لا يسمح للمستخدم بحذف حسابه من Firestore.
       allow delete: if false;
 
+
+      // ================================================
+      // المهام المكتملة
+      // ================================================
       match /completedTasks/{taskId} {
+
         allow read: if request.auth != null
                     && request.auth.uid == userId;
+
+        // الإضافة تتم من Cloud Functions فقط.
         allow write: if false;
       }
 
+
+      // ================================================
+      // المشتريات
+      // ================================================
       match /purchases/{purchaseId} {
+
         allow read: if request.auth != null
                     && request.auth.uid == userId;
+
+        // الشراء والتفعيل يتمان من Cloud Functions فقط.
         allow write: if false;
       }
     }
 
-    // المهام متاحة للقراءة للمستخدمين المسجلين فقط.
-    // إنشاء وتعديل وحذف المهام يتم من Cloud Functions.
+
+    // ==================================================
+    // المهام
+    // ==================================================
     match /tasks/{taskId} {
+
+      // المستخدمون المسجلون يستطيعون رؤية المهام.
       allow read: if request.auth != null;
+
+      // الإنشاء والتعديل والحذف من Cloud Functions فقط.
       allow write: if false;
     }
 
-    // المنتجات متاحة للقراءة للمستخدمين المسجلين فقط.
+
+    // ==================================================
+    // المنتجات
+    // ==================================================
     match /products/{productId} {
+
+      // المستخدمون المسجلون يستطيعون رؤية المنتجات.
       allow read: if request.auth != null;
+
+      // الإنشاء والتعديل والحذف من Cloud Functions فقط.
       allow write: if false;
     }
 
-    // المستخدم يستطيع إنشاء طلب سحب من خلال Cloud Function فقط.
+
+    // ==================================================
+    // طلبات السحب
+    // ==================================================
     match /withdrawals/{withdrawalId} {
+
+      // المستخدم يرى طلبات السحب الخاصة به فقط.
       allow read: if request.auth != null
                   && resource.data.uid == request.auth.uid;
+
+      // إنشاء وتعديل وحذف الطلبات من Cloud Functions فقط.
       allow write: if false;
     }
 
-    // سجل النظام غير متاح للمستخدمين.
+
+    // ==================================================
+    // سجل النظام
+    // ==================================================
     match /auditLogs/{logId} {
+
+      // السجل داخلي فقط.
       allow read, write: if false;
     }
   }
