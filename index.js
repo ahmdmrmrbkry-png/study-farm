@@ -1,33 +1,22 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const {
+  getFirestore,
+  FieldValue,
+} = require("firebase-admin/firestore");
 
 initializeApp();
 
 const db = getFirestore();
 
-/*
-  Study Farm V2
-  Firebase Cloud Functions
+// ============================================================
+// Study Farm V2 - Firebase Cloud Functions
+// ============================================================
 
-  العمليات:
-  - إنشاء/تهيئة حساب المستخدم
-  - إضافة نقاط من خلال المهام
-  - شراء من المتجر
-  - تفعيل العناصر
-  - إنشاء طلب سحب
-  - إدارة المهام بواسطة الأدمن
-  - إدارة المتجر بواسطة الأدمن
-
-  ملاحظة:
-  لا يتم إرسال أموال حقيقية تلقائياً من هذا الكود.
-  طلبات السحب تُحفظ في Firestore ليتم مراجعتها من لوحة الأدمن.
-*/
-
-// ----------------------------------------------------
+// ------------------------------------------------------------
 // أدوات مساعدة
-// ----------------------------------------------------
+// ------------------------------------------------------------
 
 function requireAuth(request) {
   if (!request.auth) {
@@ -71,9 +60,19 @@ function positiveNumber(value) {
   return number;
 }
 
-// ----------------------------------------------------
+function nonNegativeNumber(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number) || number < 0) {
+    return 0;
+  }
+
+  return number;
+}
+
+// ============================================================
 // إنشاء حساب المستخدم
-// ----------------------------------------------------
+// ============================================================
 
 exports.createProfile = onCall(async (request) => {
   const uid = requireAuth(request);
@@ -84,7 +83,7 @@ exports.createProfile = onCall(async (request) => {
   if (snapshot.exists) {
     return {
       success: true,
-      message: "الحساب موجود بالفعل."
+      message: "الحساب موجود بالفعل.",
     };
   }
 
@@ -96,18 +95,18 @@ exports.createProfile = onCall(async (request) => {
     totalWithdrawn: 0,
     completedTasks: 0,
     createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp()
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   return {
     success: true,
-    message: "تم إنشاء الحساب."
+    message: "تم إنشاء الحساب.",
   };
 });
 
-// ----------------------------------------------------
+// ============================================================
 // إكمال مهمة
-// ----------------------------------------------------
+// ============================================================
 
 exports.completeTask = onCall(async (request) => {
   const uid = requireAuth(request);
@@ -123,6 +122,7 @@ exports.completeTask = onCall(async (request) => {
 
   const userRef = db.collection("users").doc(uid);
   const taskRef = db.collection("tasks").doc(taskId);
+
   const completionRef = userRef
     .collection("completedTasks")
     .doc(taskId);
@@ -173,15 +173,15 @@ exports.completeTask = onCall(async (request) => {
 
     const user = userSnap.data();
 
-    const oldPoints = Number(user.points || 0);
-    const oldBalance = Number(user.balance || 0);
-    const oldTotalEarned = Number(user.totalEarned || 0);
-    const oldCompleted = Number(user.completedTasks || 0);
+    const oldPoints = nonNegativeNumber(user.points);
+    const oldBalance = nonNegativeNumber(user.balance);
+    const oldTotalEarned = nonNegativeNumber(user.totalEarned);
+    const oldCompleted = nonNegativeNumber(user.completedTasks);
 
-    transaction.set(completionRef, {
+    transaction.create(completionRef, {
       taskId,
       reward,
-      completedAt: FieldValue.serverTimestamp()
+      completedAt: FieldValue.serverTimestamp(),
     });
 
     transaction.update(userRef, {
@@ -189,30 +189,33 @@ exports.completeTask = onCall(async (request) => {
       balance: oldBalance + reward,
       totalEarned: oldTotalEarned + reward,
       completedTasks: oldCompleted + 1,
-      updatedAt: FieldValue.serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     return {
       reward,
       newBalance: oldBalance + reward,
-      newPoints: oldPoints + reward
+      newPoints: oldPoints + reward,
     };
   });
 
   return {
     success: true,
-    ...result
+    ...result,
   };
 });
 
-// ----------------------------------------------------
-// شراء منتج من المتجر
-// ----------------------------------------------------
+// ============================================================
+// شراء منتج
+// ============================================================
 
 exports.buyProduct = onCall(async (request) => {
   const uid = requireAuth(request);
 
-  const productId = cleanString(request.data?.productId, 100);
+  const productId = cleanString(
+    request.data?.productId,
+    100
+  );
 
   if (!productId) {
     throw new HttpsError(
@@ -261,7 +264,7 @@ exports.buyProduct = onCall(async (request) => {
       );
     }
 
-    const balance = Number(user.balance || 0);
+    const balance = nonNegativeNumber(user.balance);
 
     if (balance < price) {
       throw new HttpsError(
@@ -276,32 +279,32 @@ exports.buyProduct = onCall(async (request) => {
 
     transaction.update(userRef, {
       balance: balance - price,
-      updatedAt: FieldValue.serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
-    transaction.set(purchaseRef, {
+    transaction.create(purchaseRef, {
       productId,
       productName: cleanString(product.name, 200),
       price,
       purchasedAt: FieldValue.serverTimestamp(),
-      active: false
+      active: false,
     });
 
     return {
       purchaseId: purchaseRef.id,
-      remainingBalance: balance - price
+      remainingBalance: balance - price,
     };
   });
 
   return {
     success: true,
-    ...result
+    ...result,
   };
 });
 
-// ----------------------------------------------------
+// ============================================================
 // تفعيل عملية شراء
-// ----------------------------------------------------
+// ============================================================
 
 exports.activatePurchase = onCall(async (request) => {
   const uid = requireAuth(request);
@@ -336,24 +339,24 @@ exports.activatePurchase = onCall(async (request) => {
   if (snap.data().active === true) {
     return {
       success: true,
-      message: "العنصر مفعل بالفعل."
+      message: "العنصر مفعل بالفعل.",
     };
   }
 
   await purchaseRef.update({
     active: true,
-    activatedAt: FieldValue.serverTimestamp()
+    activatedAt: FieldValue.serverTimestamp(),
   });
 
   return {
     success: true,
-    message: "تم تفعيل العنصر."
+    message: "تم تفعيل العنصر.",
   };
 });
 
-// ----------------------------------------------------
+// ============================================================
 // إنشاء طلب سحب
-// ----------------------------------------------------
+// ============================================================
 
 exports.createWithdrawal = onCall(async (request) => {
   const uid = requireAuth(request);
@@ -389,7 +392,7 @@ exports.createWithdrawal = onCall(async (request) => {
     }
 
     const user = userSnap.data();
-    const balance = Number(user.balance || 0);
+    const balance = nonNegativeNumber(user.balance);
 
     if (balance < amount) {
       throw new HttpsError(
@@ -400,41 +403,44 @@ exports.createWithdrawal = onCall(async (request) => {
 
     transaction.update(userRef, {
       balance: balance - amount,
-      updatedAt: FieldValue.serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
-    transaction.set(withdrawalRef, {
+    transaction.create(withdrawalRef, {
       uid,
       amount,
       phone,
       status: "pending",
-      createdAt: FieldValue.serverTimestamp()
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     return {
       withdrawalId: withdrawalRef.id,
-      remainingBalance: balance - amount
+      remainingBalance: balance - amount,
     };
   });
 
   return {
     success: true,
-    ...result
+    ...result,
   };
 });
 
-// ----------------------------------------------------
+// ============================================================
 // إنشاء مهمة - أدمن
-// ----------------------------------------------------
+// ============================================================
 
 exports.adminCreateTask = onCall(async (request) => {
   requireAdmin(request);
 
   const name = cleanString(request.data?.name, 200);
+
   const description = cleanString(
     request.data?.description,
     500
   );
+
   const reward = positiveNumber(request.data?.reward);
 
   if (!name || reward === null) {
@@ -446,29 +452,33 @@ exports.adminCreateTask = onCall(async (request) => {
 
   const taskRef = db.collection("tasks").doc();
 
-  await taskRef.set({
+  await taskRef.create({
     name,
     description,
     reward,
     active: true,
     createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp()
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   return {
     success: true,
-    taskId: taskRef.id
+    taskId: taskRef.id,
   };
 });
 
-// ----------------------------------------------------
-// تعطيل/تفعيل مهمة - أدمن
-// ----------------------------------------------------
+// ============================================================
+// تفعيل / تعطيل مهمة - أدمن
+// ============================================================
 
 exports.adminSetTaskStatus = onCall(async (request) => {
   requireAdmin(request);
 
-  const taskId = cleanString(request.data?.taskId, 100);
+  const taskId = cleanString(
+    request.data?.taskId,
+    100
+  );
+
   const active = request.data?.active;
 
   if (!taskId || typeof active !== "boolean") {
@@ -480,28 +490,39 @@ exports.adminSetTaskStatus = onCall(async (request) => {
 
   const taskRef = db.collection("tasks").doc(taskId);
 
+  const snap = await taskRef.get();
+
+  if (!snap.exists) {
+    throw new HttpsError(
+      "not-found",
+      "المهمة غير موجودة."
+    );
+  }
+
   await taskRef.update({
     active,
-    updatedAt: FieldValue.serverTimestamp()
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   return {
-    success: true
+    success: true,
   };
 });
 
-// ----------------------------------------------------
+// ============================================================
 // إنشاء منتج - أدمن
-// ----------------------------------------------------
+// ============================================================
 
 exports.adminCreateProduct = onCall(async (request) => {
   requireAdmin(request);
 
   const name = cleanString(request.data?.name, 200);
+
   const description = cleanString(
     request.data?.description,
     500
   );
+
   const price = positiveNumber(request.data?.price);
 
   if (!name || price === null) {
@@ -513,24 +534,24 @@ exports.adminCreateProduct = onCall(async (request) => {
 
   const productRef = db.collection("products").doc();
 
-  await productRef.set({
+  await productRef.create({
     name,
     description,
     price,
     active: true,
     createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp()
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
   return {
     success: true,
-    productId: productRef.id
+    productId: productRef.id,
   };
 });
 
-// ----------------------------------------------------
-// تغيير حالة المنتج - أدمن
-// ----------------------------------------------------
+// ============================================================
+// تفعيل / تعطيل منتج - أدمن
+// ============================================================
 
 exports.adminSetProductStatus = onCall(async (request) => {
   requireAdmin(request);
@@ -549,22 +570,32 @@ exports.adminSetProductStatus = onCall(async (request) => {
     );
   }
 
-  await db
+  const productRef = db
     .collection("products")
-    .doc(productId)
-    .update({
-      active,
-      updatedAt: FieldValue.serverTimestamp()
-    });
+    .doc(productId);
+
+  const snap = await productRef.get();
+
+  if (!snap.exists) {
+    throw new HttpsError(
+      "not-found",
+      "المنتج غير موجود."
+    );
+  }
+
+  await productRef.update({
+    active,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 
   return {
-    success: true
+    success: true,
   };
 });
 
-// ----------------------------------------------------
-// مراجعة طلب سحب - أدمن
-// ----------------------------------------------------
+// ============================================================
+// تحديث طلب السحب - أدمن
+// ============================================================
 
 exports.adminUpdateWithdrawal = onCall(async (request) => {
   requireAdmin(request);
@@ -574,7 +605,7 @@ exports.adminUpdateWithdrawal = onCall(async (request) => {
     100
   );
 
-  const status = cleanString(
+  const newStatus = cleanString(
     request.data?.status,
     30
   );
@@ -583,12 +614,12 @@ exports.adminUpdateWithdrawal = onCall(async (request) => {
     "pending",
     "approved",
     "rejected",
-    "paid"
+    "paid",
   ];
 
   if (
     !withdrawalId ||
-    !allowedStatuses.includes(status)
+    !allowedStatuses.includes(newStatus)
   ) {
     throw new HttpsError(
       "invalid-argument",
@@ -600,28 +631,146 @@ exports.adminUpdateWithdrawal = onCall(async (request) => {
     .collection("withdrawals")
     .doc(withdrawalId);
 
-  const snap = await withdrawalRef.get();
+  const result = await db.runTransaction(async (transaction) => {
+    const withdrawalSnap =
+      await transaction.get(withdrawalRef);
 
-  if (!snap.exists) {
-    throw new HttpsError(
-      "not-found",
-      "طلب السحب غير موجود."
-    );
-  }
+    if (!withdrawalSnap.exists) {
+      throw new HttpsError(
+        "not-found",
+        "طلب السحب غير موجود."
+      );
+    }
 
-  await withdrawalRef.update({
-    status,
-    updatedAt: FieldValue.serverTimestamp()
+    const withdrawal =
+      withdrawalSnap.data();
+
+    const oldStatus =
+      cleanString(withdrawal.status, 30);
+
+    // --------------------------------------------------------
+    // منع تغيير الطلب بعد الدفع
+    // --------------------------------------------------------
+
+    if (oldStatus === "paid") {
+      throw new HttpsError(
+        "failed-precondition",
+        "لا يمكن تغيير طلب تم دفعه."
+      );
+    }
+
+    // --------------------------------------------------------
+    // الطلب المرفوض لا يمكن إرجاعه إلى حالة أخرى
+    // --------------------------------------------------------
+
+    if (oldStatus === "rejected") {
+      throw new HttpsError(
+        "failed-precondition",
+        "لا يمكن تغيير طلب مرفوض."
+      );
+    }
+
+    // --------------------------------------------------------
+    // منع دفع طلب لم تتم الموافقة عليه
+    // --------------------------------------------------------
+
+    if (
+      newStatus === "paid" &&
+      oldStatus !== "approved"
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        "يجب الموافقة على الطلب أولاً."
+      );
+    }
+
+    // --------------------------------------------------------
+    // منع الموافقة على طلب مدفوع أو مرفوض
+    // --------------------------------------------------------
+
+    if (
+      newStatus === "approved" &&
+      oldStatus !== "pending"
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        "لا يمكن الموافقة على هذه الحالة."
+      );
+    }
+
+    // --------------------------------------------------------
+    // رفض طلب مع إعادة المبلغ للمستخدم
+    // --------------------------------------------------------
+
+    if (
+      newStatus === "rejected" &&
+      oldStatus === "pending"
+    ) {
+      const uid = cleanString(
+        withdrawal.uid,
+        200
+      );
+
+      const amount = positiveNumber(
+        withdrawal.amount
+      );
+
+      if (!uid || amount === null) {
+        throw new HttpsError(
+          "failed-precondition",
+          "بيانات طلب السحب غير صحيحة."
+        );
+      }
+
+      const userRef = db
+        .collection("users")
+        .doc(uid);
+
+      const userSnap =
+        await transaction.get(userRef);
+
+      if (!userSnap.exists) {
+        throw new HttpsError(
+          "not-found",
+          "حساب المستخدم غير موجود."
+        );
+      }
+
+      const user = userSnap.data();
+
+      const currentBalance =
+        nonNegativeNumber(user.balance);
+
+      transaction.update(userRef, {
+        balance: currentBalance + amount,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    // --------------------------------------------------------
+    // تسجيل التغيير
+    // --------------------------------------------------------
+
+    transaction.update(withdrawalRef, {
+      status: newStatus,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return {
+      oldStatus,
+      newStatus,
+    };
   });
 
   return {
-    success: true
+    success: true,
+    ...result,
   };
 });
 
-// ----------------------------------------------------
-// تسجيل إنشاء طلب سحب في سجل النظام
-// ----------------------------------------------------
+// ============================================================
+// سجل إنشاء طلب السحب
+// ============================================================
 
 exports.logWithdrawalCreated = onDocumentCreated(
   "withdrawals/{withdrawalId}",
@@ -640,7 +789,7 @@ exports.logWithdrawalCreated = onDocumentCreated(
       uid: data.uid || null,
       amount: data.amount || 0,
       status: data.status || "pending",
-      createdAt: FieldValue.serverTimestamp()
+      createdAt: FieldValue.serverTimestamp(),
     });
   }
 );
